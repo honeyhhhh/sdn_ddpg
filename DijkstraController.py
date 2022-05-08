@@ -909,14 +909,14 @@ class DijkstraController(app_manager.RyuApp):
             weights[e] = w
         # 双向更新
         for (u, v), value in weights.items():
-            print(u, v, value)
+            #print(u, v, value)
             try:
                 self.topo[u][v]['weight'] = value
                 self.topo[v][u]['weight'] = value
             except KeyError:
                 pass
 
-        print(self.topo.edges(data=True))
+        #print(self.topo.edges(data=True))
 
 
     def pingall(self):
@@ -952,7 +952,7 @@ class DijkstraController(app_manager.RyuApp):
         # print("delay :{}".format(self.avg_sec))
 
         reward = self.rl_reward()
-        print("reward : {}".format(reward))
+        print("step : {}  reward : {}".format(self.total_step_count, reward))
 
 
         new_state = self.rl_state()
@@ -961,7 +961,7 @@ class DijkstraController(app_manager.RyuApp):
 
 
     def play(self):
-        print(self.env_edge)
+        # print(self.env_edge)
         # 相关常量的定义
         print("play")
         BUFFER_SIZE = 100  # 缓冲池的大小
@@ -978,7 +978,7 @@ class DijkstraController(app_manager.RyuApp):
 
         episode = 100  # 迭代的次数
         step = 1000  # 每次需要与环境交互的步数
-        total_step = 0  # 总共运行了多少步
+        # total_step = 0  # 总共运行了多少步
 
 
         # 可视化集合定义
@@ -1024,7 +1024,7 @@ class DijkstraController(app_manager.RyuApp):
 
             # 开始执行step步
             for t in range(step):
-                print(total_step)
+                # print(total_step)
                 loss = 0
 
                 a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
@@ -1078,7 +1078,7 @@ class DijkstraController(app_manager.RyuApp):
                 total_loss += loss
                 s_t = s_t1   # 转移到下一个状态
 
-                total_step += 1
+                self.total_step_count += 1
 
             # 绘图数据添加
             reward_list.append(total_reward)
