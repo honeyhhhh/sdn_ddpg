@@ -84,7 +84,7 @@ class Traffic():
         return T
 
 def read_iperf():
-    print("read iperf result.......")
+    # print("read iperf result.......")
     nodes_num = 8
     total_num = (nodes_num-1)**2
     cup_sum = 0.0
@@ -99,7 +99,7 @@ def read_iperf():
 
     for i in range(nodes_num):
 
-        fn = str(".././log/client") + str(i+1) + str(".out")
+        fn = str("./log/client") + str(i+1) + str(".out")
 
         while 1:
             with open(fn, 'r+', encoding="utf-8") as f:
@@ -108,7 +108,7 @@ def read_iperf():
                 objs = obj.split('@@')
                 j_len = len(objs)
 
-                #print(j_len)
+                # print(j_len)
                 if j_len == nodes_num - 1:
                     #print(objs)
 
@@ -619,7 +619,7 @@ class DijkstraController(app_manager.RyuApp):
         # env
         self.ACTIVE_NODES = 8
         self.LINKS_NUM = 10
-        self.a_dim = self.ACTIVE_NODES
+        self.a_dim = self.LINKS_NUM
         self.s_dim = self.ACTIVE_NODES**2 - self.ACTIVE_NODES
         self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.1)
         self.env_T = np.full([self.ACTIVE_NODES]*2, -1.0, dtype=float)
@@ -889,7 +889,7 @@ class DijkstraController(app_manager.RyuApp):
 
     def rl_state(self):
         self.env_T = np.asarray(self.tgen.gen_traffic())
-        print(self.env_T)
+        # print(self.env_T)
         return self.env_T[(self.env_T != -1)]
 
     def softmax(self, action):
@@ -900,7 +900,7 @@ class DijkstraController(app_manager.RyuApp):
         return -(self.avg_sec*10 +self.avg_jit*100)
 
     def upd_weights(self):
-        print("update weights.....")
+        # print("update weights.....")
         #print(self.topo.edges(data=True))   #(1, 8, {'src_port': 4, 'dst_port': 2, 'weight': 2}) 列表
         # print(self.topo.nodes(data=True))   #(1, {'ports': [4, 1, 2, 3]}) 列表
 
@@ -909,6 +909,7 @@ class DijkstraController(app_manager.RyuApp):
             weights[e] = w
         # 双向更新
         for (u, v), value in weights.items():
+            print(u, v, value)
             try:
                 self.topo[u][v]['weight'] = value
                 self.topo[v][u]['weight'] = value
@@ -919,10 +920,10 @@ class DijkstraController(app_manager.RyuApp):
 
 
     def pingall(self):
-        print("pingall...")
+        # print("pingall...")
         ok = self.net.pingAll()
         time.sleep(.1)
-        print("pingdone! {}".format(ok))
+        # print("pingdone! {}".format(ok))
 
 
 
@@ -930,25 +931,25 @@ class DijkstraController(app_manager.RyuApp):
 
         self.total_step_count += 1
 
-        # print(action)
+        #print(action)
 
         self.env_W = np.asarray(self.softmax(action))
-        # print(self.env_W)
+        #print(self.env_W)
 
 
         # update weights and flowtable
         self.upd_weights()
         for dp in self.datapaths:
             self.delete_flow(dp)
-        print("del dlows done !")
+        # print("del dlows done !")
         self.pingall()
 
         # excute
-        print("excute mininet....")
+        # print("excute mininet....")
         self.net.iperfMulti(hl=self.HostList, tm=self.env_T)
         # read output
         self.avg_cpup, self.avg_sec, self.avg_jit, self.loss_p, self.ooo_p = read_iperf()
-        print("delay :{}".format(self.avg_sec))
+        # print("delay :{}".format(self.avg_sec))
 
         reward = self.rl_reward()
         print("reward : {}".format(reward))
@@ -960,9 +961,10 @@ class DijkstraController(app_manager.RyuApp):
 
 
     def play(self):
+        print(self.env_edge)
         # 相关常量的定义
         print("play")
-        BUFFER_SIZE = 1000  # 缓冲池的大小
+        BUFFER_SIZE = 100  # 缓冲池的大小
         BATCH_SIZE = 16  # batch_size的大小
         GAMMA = 0.99  # 折扣系数
         TAU = 0.001  # target网络软更新的速度
@@ -1022,6 +1024,7 @@ class DijkstraController(app_manager.RyuApp):
 
             # 开始执行step步
             for t in range(step):
+                print(total_step)
                 loss = 0
 
                 a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
