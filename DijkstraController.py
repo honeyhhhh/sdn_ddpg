@@ -358,6 +358,7 @@ def myNetwork():
 
     # CLI(net)
     #net.stop()
+    time.sleep(3)
 
     return net, HostList
 
@@ -610,6 +611,9 @@ class DijkstraController(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(DijkstraController, self).__init__(*args, **kwargs)
+        self.net, self.HostList = myNetwork()
+
+
         self.datapaths = []  # 保存受控制的交换机
         self.host_mac_to = {}  # 记录与主机直接相连的交换机 ID 与端口
         self.topo = Topo()  # 控制器发现的拓扑
@@ -626,7 +630,6 @@ class DijkstraController(app_manager.RyuApp):
         self.env_W = np.full([self.a_dim], -1.0, dtype=float)
         self.env_edge = []  # 保存无向边
 
-        self.net, self.HostList = myNetwork()
         self.train_thread = hub.spawn(self._main)
         self.topo_done = 0
 
@@ -642,13 +645,13 @@ class DijkstraController(app_manager.RyuApp):
 
     def _main(self):
         print("Initializing....")
-        time.sleep(10)
-        print(self.net.pingAll())
+
+        # print(self.net.pingAll())
         time.sleep(5)
-        for dp in self.datapaths:
-            self.delete_flow(dp)
-        print("del dlows done !")
-        assert self.topo_done == 1
+        # for dp in self.datapaths:
+        #     self.delete_flow(dp)
+        # print("del dlows done !")
+        # assert self.topo_done == 1
         self.play()
 
 
@@ -897,7 +900,7 @@ class DijkstraController(app_manager.RyuApp):
 
     def rl_reward(self):
 
-        return -(self.avg_sec*10 +self.avg_jit*100)
+        return -(self.avg_sec*1000)
 
     def upd_weights(self):
         # print("update weights.....")
@@ -916,6 +919,20 @@ class DijkstraController(app_manager.RyuApp):
             except KeyError:
                 pass
 
+
+        plt.clf()
+
+        self.topo.pos = nx.spring_layout(self.topo)
+        edge_labels = {e[0:2]: e[2]["weight"]
+                       for e in list(self.topo.edges(data=True))}
+        nx.draw(self.topo, pos=self.topo.pos,
+                edgecolors="black", **self.topo.plot_options)
+        nx.draw_networkx_edge_labels(
+            self.topo, pos=self.topo.pos, edge_labels=edge_labels)
+        plt.show()
+        plt.savefig("Topo"+str(self.total_step_count)+".png")
+        plt.pause(.5)
+
         #print(self.topo.edges(data=True))
 
 
@@ -929,11 +946,11 @@ class DijkstraController(app_manager.RyuApp):
 
     def step(self, action):
 
-        self.total_step_count += 1
+        # self.total_step_count += 1
 
         #print(action)
 
-        self.env_W = np.asarray(self.softmax(action))
+        self.env_W = np.asarray(action)
         #print(self.env_W)
 
 
@@ -976,8 +993,8 @@ class DijkstraController(app_manager.RyuApp):
         action_dim = self.a_dim  # 动作的维度---w
         state_dim = self.s_dim  # 状态的维度---流量在链路上的分配信息
 
-        episode = 100  # 迭代的次数
-        step = 1000  # 每次需要与环境交互的步数
+        episode = 10  # 迭代的次数
+        step = 100  # 每次需要与环境交互的步数
         # total_step = 0  # 总共运行了多少步
 
 
@@ -1067,7 +1084,7 @@ class DijkstraController(app_manager.RyuApp):
                 states = states.reshape(len(states), -1)
                 actions = actions.reshape(len(actions), -1)
                 y_t = y_t.reshape(len(y_t), -1)
-                loss += critic.model.train_on_batch([states, actions], y_t)  # 计算当前target网络和eval网络的损失值
+                loss = critic.model.train_on_batch([states, actions], y_t)  # 计算当前target网络和eval网络的损失值
                 a_for_grad = actor.model.predict(states)  # 当前状态下eval网络产生的动作
                 grads = critic.tarin(states, a_for_grad)  # 产生的梯度
                 actor.train(states, grads)  # 更新eval网络
@@ -1088,24 +1105,24 @@ class DijkstraController(app_manager.RyuApp):
             # 每隔100次保存一次参数
             print("Now we save model")
             actor.model.save_weights("src/actormodel.h5", overwrite=True)
-            with open("src/actormodel.json", "w") as outfile:
-                json.dump(actor.model.to_json(), outfile)
+            # with open("src/actormodel.json", "w") as outfile:
+            #     json.dump(actor.model.to_json(), outfile)
 
             critic.model.save_weights("src/criticmodel.h5", overwrite=True)
-            with open("src/criticmodel.json", "w") as outfile:
-                json.dump(critic.model.to_json(), outfile)
+            # with open("src/criticmodel.json", "w") as outfile:
+            #     json.dump(critic.model.to_json(), outfile)
 
             # 打印相关信息
             print("")
             print("-" * 50)
             print("TOTAL REWARD @ " + str(i) + "-th Episode  : Reward " + str(total_reward))
             print("TOTAL LOSS @ " + str(i) + "-th Episode  : LOSS " + str(total_loss / step))
-            print("Total Step: " + str(total_step))
+            print("Total Step: " + str(self.total_step_count))
             print("-" * 50)
             print("")
 
             # 绘制图像，并保存
-            if i != 0 and i % 100 == 0:
+            if i != 0 and i % 10 == 0:
                 plt.cla()
                 plt.plot(step_list, reward_list)
                 plt.xlabel("step")
@@ -1113,7 +1130,7 @@ class DijkstraController(app_manager.RyuApp):
                 plt.title("reward-step")
                 img_name = "img/reward/" + str(i) + "-th Episode"
                 plt.savefig(img_name)
-            if i != 0 and i % 100 == 0:
+            if i != 0 and i % 10 == 0:
                 plt.cla()  # 清除
                 plt.plot(step_list, loss_list)
                 plt.xlabel("step")
@@ -1125,12 +1142,12 @@ class DijkstraController(app_manager.RyuApp):
         # 训练完成之后最后保存信息
         print("Now we save model")
         actor.model.save_weights("src/actormodel.h5", overwrite=True)
-        with open("src/actormodel.json", "w") as outfile:
-            json.dump(actor.model.to_json(), outfile)
+        # with open("src/actormodel.json", "w") as outfile:
+        #     json.dump(actor.model.to_json(), outfile)
 
         critic.model.save_weights("src/criticmodel.h5", overwrite=True)
-        with open("src/criticmodel.json", "w") as outfile:
-            json.dump(critic.model.to_json(), outfile)
+        # with open("src/criticmodel.json", "w") as outfile:
+        #     json.dump(critic.model.to_json(), outfile)
 
         print("Finish.")
 
