@@ -7,6 +7,8 @@ import tensorflow as tf
 from keras.layers import Input, Dense
 from keras.models import Model
 from keras.optimizers import Adam
+from keras.utils import plot_model
+
 
 # Critic神经网络
 class CriticNetwork(object):
@@ -61,7 +63,17 @@ class CriticNetwork(object):
         model = Model(input=[S, A], output=V)
         adam = Adam(lr=self.learning_rate)
         model.compile(loss='mse', optimizer=adam)
+        plot_model(model, to_file="model2.png", show_shapes=True)
+
         return model, S, A
 
 
+if __name__ == '__main__':
+    # 神经网络相关操作定义
+    sess = tf.Session()
+    from keras import backend as K
+
+    K.set_session(sess)
+    # 初始化四个个网络
+    actor = CriticNetwork(sess, 56, 10, 16, 0.01, 0.01)
 

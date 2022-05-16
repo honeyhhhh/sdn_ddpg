@@ -47,7 +47,7 @@ class Traffic():
         self.pre_traffic = None
         self.ratio = ratio
         self.bw = bw
-        self.br = self.bw * self.links_num * self.ratio
+        self.br = self.bw * self.links_num * self.ratio * 2
 
 
     def gen_traffic(self):
@@ -128,7 +128,7 @@ def read_iperf():
                     f.close()
                     break
                 f.close()
-                time.sleep(.05)
+                time.sleep(.01)
 
 
     cup_avg = cup_sum / total_num
@@ -157,6 +157,7 @@ ports = [
     [5061, 5062, 5063, 5064, 5065, 5066, -1, 5068],
     [5071, 5072, 5073, 5074, 5075, 5076, 5077, -1]
 ]
+
 
 def run_ryu():
     print('run ryu')
@@ -625,7 +626,7 @@ class DijkstraController(app_manager.RyuApp):
         self.LINKS_NUM = 10
         self.a_dim = self.LINKS_NUM
         self.s_dim = self.ACTIVE_NODES**2 - self.ACTIVE_NODES
-        self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.1)
+        self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.9)
         self.env_T = np.full([self.ACTIVE_NODES]*2, -1.0, dtype=float)
         self.env_W = np.full([self.a_dim], -1.0, dtype=float)
         self.env_edge = []  # 保存无向边
@@ -647,7 +648,7 @@ class DijkstraController(app_manager.RyuApp):
         print("Initializing....")
 
         # print(self.net.pingAll())
-        time.sleep(5)
+        time.sleep(8)
         # for dp in self.datapaths:
         #     self.delete_flow(dp)
         # print("del dlows done !")
@@ -692,7 +693,7 @@ class DijkstraController(app_manager.RyuApp):
                 out_port=ofproto.OFPP_ANY, out_group=ofproto.OFPG_ANY,
                 priority=1, match=match, instructions=inst)
             datapath.send_msg(mod)
-            time.sleep(.05)
+            time.sleep(.01)
 
     def add_flow(self, datapath, priority, match, actions):
         """
@@ -900,7 +901,7 @@ class DijkstraController(app_manager.RyuApp):
 
     def rl_reward(self):
 
-        return -(self.avg_sec*1000)
+        return -(self.avg_sec + self.avg_jit*10)
 
     def upd_weights(self):
         # print("update weights.....")
@@ -920,18 +921,18 @@ class DijkstraController(app_manager.RyuApp):
                 pass
 
 
-        plt.clf()
-
-        self.topo.pos = nx.spring_layout(self.topo)
-        edge_labels = {e[0:2]: e[2]["weight"]
-                       for e in list(self.topo.edges(data=True))}
-        nx.draw(self.topo, pos=self.topo.pos,
-                edgecolors="black", **self.topo.plot_options)
-        nx.draw_networkx_edge_labels(
-            self.topo, pos=self.topo.pos, edge_labels=edge_labels)
-        plt.show()
-        plt.savefig("Topo"+str(self.total_step_count)+".png")
-        plt.pause(.5)
+        # plt.clf()
+        #
+        # self.topo.pos = nx.spring_layout(self.topo)
+        # edge_labels = {e[0:2]: e[2]["weight"]
+        #                for e in list(self.topo.edges(data=True))}
+        # nx.draw(self.topo, pos=self.topo.pos,
+        #         edgecolors="black", **self.topo.plot_options)
+        # nx.draw_networkx_edge_labels(
+        #     self.topo, pos=self.topo.pos, edge_labels=edge_labels)
+        # plt.show()
+        # plt.savefig("Topo"+str(self.total_step_count)+".png")
+        # plt.pause(.5)
 
         #print(self.topo.edges(data=True))
 
@@ -939,7 +940,7 @@ class DijkstraController(app_manager.RyuApp):
     def pingall(self):
         # print("pingall...")
         ok = self.net.pingAll()
-        time.sleep(.1)
+        time.sleep(.05)
         # print("pingdone! {}".format(ok))
 
 
@@ -969,8 +970,6 @@ class DijkstraController(app_manager.RyuApp):
         # print("delay :{}".format(self.avg_sec))
 
         reward = self.rl_reward()
-        print("step : {}  reward : {}".format(self.total_step_count, reward))
-
 
         new_state = self.rl_state()
 
@@ -984,17 +983,17 @@ class DijkstraController(app_manager.RyuApp):
         BUFFER_SIZE = 100  # 缓冲池的大小
         BATCH_SIZE = 16  # batch_size的大小
         GAMMA = 0.99  # 折扣系数
-        TAU = 0.001  # target网络软更新的速度
-        LR_A = 0.001  # Actor网络的学习率
-        LR_C = 0.001  # Critic网络的学习率
+        TAU = 0.01  # target网络软更新的速度
+        LR_A = 0.01  # Actor网络的学习率
+        LR_C = 0.01  # Critic网络的学习率
 
         # 相关变量的定义
-        vertex_num = self.ACTIVE_NODES  # 顶点的个数
+
         action_dim = self.a_dim  # 动作的维度---w
         state_dim = self.s_dim  # 状态的维度---流量在链路上的分配信息
 
-        episode = 10  # 迭代的次数
-        step = 100  # 每次需要与环境交互的步数
+        episode = 1000  # 迭代的次数
+        step = 10  # 每次需要与环境交互的步数
         # total_step = 0  # 总共运行了多少步
 
 
@@ -1027,7 +1026,6 @@ class DijkstraController(app_manager.RyuApp):
         except:
             print("Cannot find the weight")
 
-
         s_t = self.rl_state()
         # print(s_t)
         # print(s_t.shape)
@@ -1035,9 +1033,12 @@ class DijkstraController(app_manager.RyuApp):
         print("Experiment Start.")
         for i in range(episode):
             # 输出当前信息
+            if i == 10:
+                self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.5)
             print("Episode : " + str(i) + " Replay Buffer " + str(buff.getCount()))
             total_reward =  0
             total_loss = 0
+
 
             # 开始执行step步
             for t in range(step):
@@ -1062,6 +1063,7 @@ class DijkstraController(app_manager.RyuApp):
 
                 # 环境交互,
                 s_t1, r_t = self.step(a_t)
+
 
                 # 将该状态转移存储到缓冲池中
                 buff.add(s_t, a_t, r_t, s_t1)
@@ -1095,6 +1097,8 @@ class DijkstraController(app_manager.RyuApp):
                 total_loss += loss
                 s_t = s_t1   # 转移到下一个状态
 
+                print("step : {}  avg_sec : {} avg_jit: {}, loss: {}, lossp:{}".format(self.total_step_count, self.avg_sec, self.avg_jit, loss, self.loss_p))
+
                 self.total_step_count += 1
 
             # 绘图数据添加
@@ -1125,6 +1129,7 @@ class DijkstraController(app_manager.RyuApp):
             if i != 0 and i % 10 == 0:
                 plt.cla()
                 plt.plot(step_list, reward_list)
+                print(step_list, reward_list)
                 plt.xlabel("step")
                 plt.ylabel("reward")
                 plt.title("reward-step")
@@ -1156,4 +1161,6 @@ if __name__ == '__main__':
     os.system('mn -c')
     os.system('ryu-manager /usr/local/SDNDDPG/DijkstraController.py --observe-links')
 
-    # print([i for i in combinations(range(1, 8 + 1), 2)])
+
+
+    # print([i for i in range(5001, 5001+(13*13))])

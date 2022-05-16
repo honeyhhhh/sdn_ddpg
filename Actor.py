@@ -5,6 +5,7 @@ import tensorflow as tf
 import keras.backend as K
 from keras.layers import Input, Dense
 from keras.models import Model
+from keras.utils import plot_model
 
 # Actor神经网络
 class ActorNetwork(object):
@@ -67,6 +68,17 @@ class ActorNetwork(object):
         Link_weights = Dense(action_size, activation='tanh', kernel_initializer=init_w, bias_initializer=init_b)(h1)
 
         model = Model(input=S, output=Link_weights)
+
+        plot_model(model, to_file="model.png", show_shapes=True)
+
         return model, model.trainable_weights, S
 
 
+if __name__ == '__main__':
+    # 神经网络相关操作定义
+    sess = tf.Session()
+    from keras import backend as K
+
+    K.set_session(sess)
+    # 初始化四个个网络
+    actor = ActorNetwork(sess, 56, 10, 16, 0.01, 0.01)
