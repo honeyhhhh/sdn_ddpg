@@ -127,11 +127,15 @@ def read_iperf():
                         # print(data['end']['streams'][0]['udp']['seconds'], data['end']['streams'][0]['udp']['jitter_ms'], data['end']['streams'][0]['udp']['lost_packets'], data['end']['streams'][0]['udp']['out_of_order'])
                         # print(data['end']['sum']['seconds'], data['end']['sum']['jitter_ms'], data['end']['sum']['lost_packets'])
                     f.seek(0)
+                    time.sleep(.01)
+                    f.seek(0)
+                    f.truncate()
+                    time.sleep(.01)
                     f.truncate()
                     f.close()
                     break
                 f.close()
-                time.sleep(.01)
+                time.sleep(.1)
 
 
     cup_avg = cup_sum / total_num
@@ -875,7 +879,7 @@ class DijkstraController(app_manager.RyuApp):
             weight = self.topo.edges[v, u]['weight'] if self.topo.has_edge(
                 v, u) else randint(1, 10)
             self.topo.add_edge(
-                u, v, **{"src_port": link.src.port_no, "dst_port": link.dst.port_no, "weight": weight})
+                u, v, **{"src_port": link.src.port_no, "dst_port": link.dst.port_no, "weight": 1})
             if (u , v) not in self.env_edge and (v , u) not in self.env_edge:
                 self.env_edge.append((u, v))
 
@@ -1010,16 +1014,16 @@ class DijkstraController(app_manager.RyuApp):
 
 
         # 可视化集合定义
-        reward_list = []  # 记录所有的rewards进行可视化展示
-        loss_list = []  # 记录损失函数进行可视化展示
+        # reward_list = []  # 记录所有的rewards进行可视化展示
+        # loss_list = []  # 记录损失函数进行可视化展示
+        self.pingall()
+
         avgsec_list = []
         maxsec_list = []
         jit_list = []
-        cpu_list = []
         lossp_list = []
+        ti_list = [] # 0.0100-0.0500
 
-        step_list2 = []
-        step_list = []  # 记录每一步的结果
 
         # 神经网络相关操作定义
         sess = tf.Session()
@@ -1036,166 +1040,202 @@ class DijkstraController(app_manager.RyuApp):
 
         # 加载训练数据
         print("Now we load the weight")
-        try:
-            actor.model.load_weights("src/actormodel.h5")
-            critic.model.load_weights("src/criticmodel.h5")
-            actor.target_model.load_weights("src/actormodel.h5")
-            critic.target_model.load_weights("src/criticmodel.h5")
-            print("Weight load successfully")
-        except:
-            print("Cannot find the weight")
 
-        s_t = self.rl_state()
-        # print(s_t)
-        # print(s_t.shape)
-        # 开始迭代
-        print("Experiment Start.")
-        for i in range(episode):
-            # 输出当前信息 0.05 0.025 0.01
-            if i == 5:
-                self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.01)
-            print("Episode : " + str(i) + " Replay Buffer " + str(buff.getCount()))
-            total_reward =  0
-            total_loss = 0
+        actor.model.load_weights(r"./src/actormodel.h5")
+        critic.model.load_weights(r"./src/criticmodel.h5")
+        actor.target_model.load_weights(r"./src/actormodel.h5")
+        critic.target_model.load_weights(r"./src/criticmodel.h5")
+        print("Weight load successfully")
 
+        ti = 0.01
+        tia = 0.0001
 
-            # 开始执行step步
-            for t in range(step):
-                # print(total_step)
-                loss = 0
+        while ti <= 0.05:
+            self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=ti)
+            s_t = self.rl_state()
+            # a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
+            # a_t = np.fabs(a_t_original[0])
+            # self.step(a_t)
 
-                a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
-                # print(a_t_original)  #[[........]]
-                # print(a_t_original.shape) #(1,8)
+            # excute
+            # print("excute mininet....")
+            self.net.iperfMulti(hl=self.HostList, tm=self.env_T)
+            # read output
+            self.avg_cpup, self.avg_sec, self.avg_jit, self.loss_p, self.sec_max = read_iperf()
 
 
-                # 添加噪声和探索
-                explore = 20
-                if i <= explore:
-                    a_t_original = OU.function(a_t_original, 1.0, (i / explore), 1.0 - (i / explore))
-                else:
-                    a_t_original = OU.function(a_t_original, 1.0, 0.8, 0.2)
-                # print(a_t_original)
-                a_t = np.fabs(a_t_original[0])
-                # print(a_t.shape) #(8,)
+            print("ti : {}  avg_sec : {} max_sec: {} jit: {} loss: {}".format(ti, self.avg_sec, self.sec_max, self.avg_jit, self.loss_p))
+
+            avgsec_list.append(self.avg_sec)
+            maxsec_list.append(self.sec_max)
+            jit_list.append(self.avg_jit)
+            lossp_list.append(self.loss_p)
+            ti_list.append(ti)
+            ti += tia
 
 
-                # 环境交互,
-                s_t1, r_t = self.step(a_t)
-
-
-                # 将该状态转移存储到缓冲池中
-                buff.add(s_t, a_t, r_t, s_t1)
-
-                # 选取batch_size个样本
-                batch = buff.getBatch(BATCH_SIZE)
-                states = np.asarray([e[0] for e in batch])
-                actions = np.asarray([e[1] for e in batch])
-                rewards = np.asarray([e[2] for e in batch])
-                new_states = np.asarray([e[3] for e in batch])
-                y_t = np.asarray([e[2] for e in batch])
-
-                # 目标网络的预测q值---相当于y_label
-                target_q_values = critic.target_model.predict([new_states, actor.target_model.predict(new_states)])
-
-                for k in range(len(batch)):
-                    y_t[k] = rewards[k] + GAMMA * target_q_values[k]
-
-                # 训练网络
-                states = states.reshape(len(states), -1)
-                actions = actions.reshape(len(actions), -1)
-                y_t = y_t.reshape(len(y_t), -1)
-                loss = critic.model.train_on_batch([states, actions], y_t)  # 计算当前target网络和eval网络的损失值
-                a_for_grad = actor.model.predict(states)  # 当前状态下eval网络产生的动作
-                grads = critic.tarin(states, a_for_grad)  # 产生的梯度
-                actor.train(states, grads)  # 更新eval网络
-                actor.target_train()  # 更新target网络
-                critic.target_train()  # 更新target网络
-
-                total_reward += r_t
-                total_loss += loss
-
-                s_t = s_t1   # 转移到下一个状态
-
-                print("step : {}  avg_sec : {} max_sec: {} jit: {}".format(self.total_step_count, self.avg_sec, self.sec_max, self.avg_jit))
-
-                avgsec_list.append(self.avg_sec)
-                maxsec_list.append(self.sec_max)
-                jit_list.append(self.avg_jit)
-                cpu_list.append(self.avg_cpup)
-                lossp_list.append(self.loss_p)
-
-                step_list2.append(self.total_step_count)
-
-                self.total_step_count += 1
-
-
-                # 绘图数据添加
-                reward_list.append(r_t)
-                loss_list.append(loss)
-
-            # # 每隔100次保存一次参数
-            # print("Now we save model")
-            # actor.model.save_weights("src/actormodel.h5", overwrite=True)
-            # # with open("src/actormodel.json", "w") as outfile:
-            # #     json.dump(actor.model.to_json(), outfile)
-            #
-            # critic.model.save_weights("src/criticmodel.h5", overwrite=True)
-            # with open("src/criticmodel.json", "w") as outfile:
-            #     json.dump(critic.model.to_json(), outfile)
-
-            # 打印相关信息
-            print("")
-            print("-" * 50)
-            print("TOTAL REWARD @ " + str(i) + "-th Episode  : Reward " + str(total_reward))
-            print("TOTAL LOSS @ " + str(i) + "-th Episode  : LOSS " + str(total_loss / step))
-            print("Total Step: " + str(self.total_step_count))
-            print("-" * 50)
-            print("")
-
-            # # 绘制图像，并保存
-            # if i != 0 and i % 10 == 0:
-            #     plt.cla()
-            #     plt.plot(step_list, reward_list)
-            #     print(step_list, reward_list)
-            #     plt.xlabel("step")
-            #     plt.ylabel("reward")
-            #     plt.title("reward-step")
-            #     img_name = "img/reward/" + str(i) + "-th Episode"
-            #     plt.savefig(img_name)
-            # if i != 0 and i % 10 == 0:
-            #     plt.cla()  # 清除
-            #     plt.plot(step_list, loss_list)
-            #     plt.xlabel("step")
-            #     plt.ylabel("loss")
-            #     plt.title("loss-step")
-            #     img_name = "img/loss/" + str(i) + "-th Episode"
-            #     plt.savefig(img_name)
-
-        # 训练完成之后最后保存信息
-        print("Now we save model")
-        actor.model.save_weights("src/actormodel.h5", overwrite=True)
-        # # with open("src/actormodel.json", "w") as outfile:
-        # #     json.dump(actor.model.to_json(), outfile)
-        #
-        critic.model.save_weights("src/criticmodel.h5", overwrite=True)
-        # with open("src/criticmodel.json", "w") as outfile:
-        #     json.dump(critic.model.to_json(), outfile)
-        txt_save("sec_avg3.txt", avgsec_list)
-        txt_save("sec_max3.txt", maxsec_list)
-        txt_save("cpu3.txt", cpu_list)
-        txt_save("jit3.txt", jit_list)
-        txt_save("lossp3.txt", lossp_list)
-
-        txt_save("reward3.txt", reward_list)
-        txt_save("loss3.txt", loss_list)
+        txt_save("rip_sec_avg.txt", avgsec_list)
+        txt_save("rip_sec_max.txt", maxsec_list)
+        txt_save("rip_jit.txt", jit_list)
+        txt_save("rip_lossp.txt", lossp_list)
+        #txt_save("ti.txt", ti_list)
 
         print("Finish.")
+
+
+        #
+        # s_t = self.rl_state()
+        # # print(s_t)
+        # # print(s_t.shape)
+        # # 开始迭代
+        # print("Experiment Start.")
+        # for i in range(episode):
+        #     # 输出当前信息 0.05 0.025 0.01
+        #     if i == 5:
+        #         self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.01)
+        #     print("Episode : " + str(i) + " Replay Buffer " + str(buff.getCount()))
+        #     total_reward =  0
+        #     total_loss = 0
+        #
+        #
+        #     # 开始执行step步
+        #     for t in range(step):
+        #         # print(total_step)
+        #         loss = 0
+        #
+        #         a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
+        #         # print(a_t_original)  #[[........]]
+        #         # print(a_t_original.shape) #(1,8)
+        #
+        #
+        #         # 添加噪声和探索
+        #         explore = 20
+        #         if i <= explore:
+        #             a_t_original = OU.function(a_t_original, 1.0, (i / explore), 1.0 - (i / explore))
+        #         else:
+        #             a_t_original = OU.function(a_t_original, 1.0, 0.8, 0.2)
+        #         # print(a_t_original)
+        #         a_t = np.fabs(a_t_original[0])
+        #         # print(a_t.shape) #(8,)
+        #
+        #
+        #         # 环境交互,
+        #         s_t1, r_t = self.step(a_t)
+        #
+        #
+        #         # 将该状态转移存储到缓冲池中
+        #         buff.add(s_t, a_t, r_t, s_t1)
+        #
+        #         # 选取batch_size个样本
+        #         batch = buff.getBatch(BATCH_SIZE)
+        #         states = np.asarray([e[0] for e in batch])
+        #         actions = np.asarray([e[1] for e in batch])
+        #         rewards = np.asarray([e[2] for e in batch])
+        #         new_states = np.asarray([e[3] for e in batch])
+        #         y_t = np.asarray([e[2] for e in batch])
+        #
+        #         # 目标网络的预测q值---相当于y_label
+        #         target_q_values = critic.target_model.predict([new_states, actor.target_model.predict(new_states)])
+        #
+        #         for k in range(len(batch)):
+        #             y_t[k] = rewards[k] + GAMMA * target_q_values[k]
+        #
+        #         # 训练网络
+        #         states = states.reshape(len(states), -1)
+        #         actions = actions.reshape(len(actions), -1)
+        #         y_t = y_t.reshape(len(y_t), -1)
+        #         loss = critic.model.train_on_batch([states, actions], y_t)  # 计算当前target网络和eval网络的损失值
+        #         a_for_grad = actor.model.predict(states)  # 当前状态下eval网络产生的动作
+        #         grads = critic.tarin(states, a_for_grad)  # 产生的梯度
+        #         actor.train(states, grads)  # 更新eval网络
+        #         actor.target_train()  # 更新target网络
+        #         critic.target_train()  # 更新target网络
+        #
+        #         total_reward += r_t
+        #         total_loss += loss
+        #
+        #         s_t = s_t1   # 转移到下一个状态
+        #
+        #         print("step : {}  avg_sec : {} max_sec: {} jit: {}".format(self.total_step_count, self.avg_sec, self.sec_max, self.avg_jit))
+        #
+        #         avgsec_list.append(self.avg_sec)
+        #         maxsec_list.append(self.sec_max)
+        #         jit_list.append(self.avg_jit)
+        #         cpu_list.append(self.avg_cpup)
+        #         lossp_list.append(self.loss_p)
+        #
+        #         step_list2.append(self.total_step_count)
+        #
+        #         self.total_step_count += 1
+        #
+        #
+        #         # 绘图数据添加
+        #         reward_list.append(r_t)
+        #         loss_list.append(loss)
+        #
+        #     # # 每隔100次保存一次参数
+        #     # print("Now we save model")
+        #     # actor.model.save_weights("src/actormodel.h5", overwrite=True)
+        #     # # with open("src/actormodel.json", "w") as outfile:
+        #     # #     json.dump(actor.model.to_json(), outfile)
+        #     #
+        #     # critic.model.save_weights("src/criticmodel.h5", overwrite=True)
+        #     # with open("src/criticmodel.json", "w") as outfile:
+        #     #     json.dump(critic.model.to_json(), outfile)
+        #
+        #     # 打印相关信息
+        #     print("")
+        #     print("-" * 50)
+        #     print("TOTAL REWARD @ " + str(i) + "-th Episode  : Reward " + str(total_reward))
+        #     print("TOTAL LOSS @ " + str(i) + "-th Episode  : LOSS " + str(total_loss / step))
+        #     print("Total Step: " + str(self.total_step_count))
+        #     print("-" * 50)
+        #     print("")
+        #
+        #     # # 绘制图像，并保存
+        #     # if i != 0 and i % 10 == 0:
+        #     #     plt.cla()
+        #     #     plt.plot(step_list, reward_list)
+        #     #     print(step_list, reward_list)
+        #     #     plt.xlabel("step")
+        #     #     plt.ylabel("reward")
+        #     #     plt.title("reward-step")
+        #     #     img_name = "img/reward/" + str(i) + "-th Episode"
+        #     #     plt.savefig(img_name)
+        #     # if i != 0 and i % 10 == 0:
+        #     #     plt.cla()  # 清除
+        #     #     plt.plot(step_list, loss_list)
+        #     #     plt.xlabel("step")
+        #     #     plt.ylabel("loss")
+        #     #     plt.title("loss-step")
+        #     #     img_name = "img/loss/" + str(i) + "-th Episode"
+        #     #     plt.savefig(img_name)
+        #
+        # # 训练完成之后最后保存信息
+        # print("Now we save model")
+        # actor.model.save_weights("src/actormodel.h5", overwrite=True)
+        # # # with open("src/actormodel.json", "w") as outfile:
+        # # #     json.dump(actor.model.to_json(), outfile)
+        # #
+        # critic.model.save_weights("src/criticmodel.h5", overwrite=True)
+        # # with open("src/criticmodel.json", "w") as outfile:
+        # #     json.dump(critic.model.to_json(), outfile)
+        # txt_save("sec_avg3.txt", avgsec_list)
+        # txt_save("sec_max3.txt", maxsec_list)
+        # txt_save("cpu3.txt", cpu_list)
+        # txt_save("jit3.txt", jit_list)
+        # txt_save("lossp3.txt", lossp_list)
+        #
+        # txt_save("reward3.txt", reward_list)
+        # txt_save("loss3.txt", loss_list)
+        #
+        # print("Finish.")
 
 
 
 
 if __name__ == '__main__':
+    os.system('rm /usr/local/SDNDDPG/log/*')
     os.system('mn -c')
     os.system('ryu-manager /usr/local/SDNDDPG/DijkstraController.py --observe-links')
 
