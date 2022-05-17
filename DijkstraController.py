@@ -40,6 +40,8 @@ import os
 import time
 
 
+tmd = 0
+
 class Traffic():
     def __init__(self, nodes_num , links_num , ratio=0.6, bw=10):
         self.nodes_num = nodes_num
@@ -88,11 +90,10 @@ def read_iperf():
     nodes_num = 8
     total_num = (nodes_num-1)**2
     cup_sum = 0.0
-    cup_avg = 0.0
     sec_sum = 0.0
-    sec_avg = 0.0
+    sec_max = 0.0
     jit_sum = 0.0
-    jit_avg = 0.0
+
 
     lost_sum = 0
     ooo_sum = 0
@@ -115,7 +116,9 @@ def read_iperf():
                     for item in objs:
                         data = json.loads(item)
                         cup_sum += data['end']['cpu_utilization_percent']['host_total']
-                        sec_sum += data['end']['streams'][0]['udp']['seconds']
+                        sec = data['end']['streams'][0]['udp']['seconds']
+                        sec_max = max(sec_max, sec)
+                        sec_sum += sec
                         jit_sum += data['end']['sum']['jitter_ms']
                         lost_sum += data['end']['streams'][0]['udp']['lost_packets']
                         ooo_sum += data['end']['streams'][0]['udp']['out_of_order']
@@ -143,7 +146,7 @@ def read_iperf():
     # print("out of order :{}".format(ooo_sum))
 
 
-    return cup_avg, sec_avg, jit_avg, lost_sum, ooo_sum
+    return cup_avg, sec_avg, jit_avg, lost_sum, sec_max
 
 
 # server
@@ -364,6 +367,14 @@ def myNetwork():
     return net, HostList
 
 
+def txt_save(fn, data):
+    file = open(fn, 'a')
+    for i in range(len(data)):
+        s = str(data[i]).replace('[', '').replace(']','')
+        s = s.replace("'",'').replace(',','') + "\n"
+        file.write(s)
+    file.close()
+
 
 class UnionFindSet():
     """
@@ -517,7 +528,7 @@ class Topo(nx.DiGraph): # 有向图
         plt.figure(1, figsize=(18, 14))
         plt.ion()
 
-    def dijkstra(self, src: int, dst: int, first_port: int, last_port: int):
+    def dijkstra(self, src: int, dst: int, first_port: int, last_port: int, flag: int):
         # print("dijkstra....")
         """
         获取单源最短路并返回最短路
@@ -566,7 +577,8 @@ class Topo(nx.DiGraph): # 有向图
         #print("Shortest path:", shortest_path, "length:", len(shortest_path), sep=' ')
 
         # 绘图
-        # self.draw_path(shortest_path)
+        # if flag % 500 == 0 and flag !=0:
+        #     self.draw_path(shortest_path, flag)
 
         # 生成路径：(src, in_port, out_port)->(s2, in_port, out_port)->...->(dst, in_port, out_port)
         ryu_path = []
@@ -579,7 +591,8 @@ class Topo(nx.DiGraph): # 有向图
 
         return ryu_path
 
-    def draw_path(self, path: "list[int]"):
+    def draw_path(self, path: "list[int]", flag: int):
+
         edge_to_display = []
 
         for s1, s2 in zip(path[:-1], path[1:]):
@@ -592,7 +605,7 @@ class Topo(nx.DiGraph): # 有向图
             "red" if n in path else "black" for n in list(self.nodes())]
 
         plt.clf()
-        plt.title("Shortest Path from {} to {}".format(path[0], path[-1]))
+        plt.title("Step{}: Shortest Path from {} to {}".format(flag, path[0], path[-1]))
         nx.draw(self, pos=self.pos, edge_color=edge_colors,
                 edgecolors=node_edge_colors, **self.plot_options)
 
@@ -602,8 +615,7 @@ class Topo(nx.DiGraph): # 有向图
         nx.draw_networkx_edge_labels(
             self, pos=self.pos, edge_labels=edge_labels)
 
-        plt.show()
-        plt.pause(1)
+        plt.savefig("topo"+ str(flag)+"_" + str(path[0]) + "_"+ str(path[-1]) +".png")
 
 
 
@@ -626,7 +638,7 @@ class DijkstraController(app_manager.RyuApp):
         self.LINKS_NUM = 10
         self.a_dim = self.LINKS_NUM
         self.s_dim = self.ACTIVE_NODES**2 - self.ACTIVE_NODES
-        self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.9)
+        self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.105)
         self.env_T = np.full([self.ACTIVE_NODES]*2, -1.0, dtype=float)
         self.env_W = np.full([self.a_dim], -1.0, dtype=float)
         self.env_edge = []  # 保存无向边
@@ -638,7 +650,7 @@ class DijkstraController(app_manager.RyuApp):
         self.avg_sec = 0.0
         self.avg_jit = 0.0
         self.loss_p = 0
-        self.ooo_p = 0
+        self.sec_max = 0.0
 
 
         self.total_step_count = 0
@@ -798,7 +810,7 @@ class DijkstraController(app_manager.RyuApp):
 
             # 计算路径
             path = self.topo.dijkstra(
-                src_switch, dst_switch, first_port, final_port)
+                src_switch, dst_switch, first_port, final_port, self.total_step_count)
             assert len(path) > 0
 
             # 配置路径上的交换机
@@ -901,7 +913,7 @@ class DijkstraController(app_manager.RyuApp):
 
     def rl_reward(self):
 
-        return -(self.avg_sec + self.avg_jit*10)
+        return -(self.avg_sec*5+ self.sec_max + self.avg_jit*50)
 
     def upd_weights(self):
         # print("update weights.....")
@@ -966,7 +978,7 @@ class DijkstraController(app_manager.RyuApp):
         # print("excute mininet....")
         self.net.iperfMulti(hl=self.HostList, tm=self.env_T)
         # read output
-        self.avg_cpup, self.avg_sec, self.avg_jit, self.loss_p, self.ooo_p = read_iperf()
+        self.avg_cpup, self.avg_sec, self.avg_jit, self.loss_p, self.sec_max = read_iperf()
         # print("delay :{}".format(self.avg_sec))
 
         reward = self.rl_reward()
@@ -992,7 +1004,7 @@ class DijkstraController(app_manager.RyuApp):
         action_dim = self.a_dim  # 动作的维度---w
         state_dim = self.s_dim  # 状态的维度---流量在链路上的分配信息
 
-        episode = 1000  # 迭代的次数
+        episode = 50  # 迭代的次数
         step = 10  # 每次需要与环境交互的步数
         # total_step = 0  # 总共运行了多少步
 
@@ -1000,6 +1012,13 @@ class DijkstraController(app_manager.RyuApp):
         # 可视化集合定义
         reward_list = []  # 记录所有的rewards进行可视化展示
         loss_list = []  # 记录损失函数进行可视化展示
+        avgsec_list = []
+        maxsec_list = []
+        jit_list = []
+        cpu_list = []
+        lossp_list = []
+
+        step_list2 = []
         step_list = []  # 记录每一步的结果
 
         # 神经网络相关操作定义
@@ -1033,8 +1052,8 @@ class DijkstraController(app_manager.RyuApp):
         print("Experiment Start.")
         for i in range(episode):
             # 输出当前信息
-            if i == 10:
-                self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.5)
+            if i == 5:
+                self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.1)
             print("Episode : " + str(i) + " Replay Buffer " + str(buff.getCount()))
             total_reward =  0
             total_loss = 0
@@ -1095,24 +1114,33 @@ class DijkstraController(app_manager.RyuApp):
 
                 total_reward += r_t
                 total_loss += loss
+
                 s_t = s_t1   # 转移到下一个状态
 
-                print("step : {}  avg_sec : {} avg_jit: {}, loss: {}, lossp:{}".format(self.total_step_count, self.avg_sec, self.avg_jit, loss, self.loss_p))
+                print("step : {}  avg_sec : {} max_sec: {} jit: {}".format(self.total_step_count, self.avg_sec, self.sec_max, self.avg_jit))
+
+                avgsec_list.append(self.avg_sec)
+                maxsec_list.append(self.sec_max)
+                jit_list.append(self.avg_jit)
+                cpu_list.append(self.avg_cpup)
+                lossp_list.append(self.loss_p)
+
+                step_list2.append(self.total_step_count)
 
                 self.total_step_count += 1
 
-            # 绘图数据添加
-            reward_list.append(total_reward)
-            step_list.append(i)
-            loss_list.append(total_loss / step)
 
-            # 每隔100次保存一次参数
-            print("Now we save model")
-            actor.model.save_weights("src/actormodel.h5", overwrite=True)
-            # with open("src/actormodel.json", "w") as outfile:
-            #     json.dump(actor.model.to_json(), outfile)
+                # 绘图数据添加
+                reward_list.append(r_t)
+                loss_list.append(loss)
 
-            critic.model.save_weights("src/criticmodel.h5", overwrite=True)
+            # # 每隔100次保存一次参数
+            # print("Now we save model")
+            # actor.model.save_weights("src/actormodel.h5", overwrite=True)
+            # # with open("src/actormodel.json", "w") as outfile:
+            # #     json.dump(actor.model.to_json(), outfile)
+            #
+            # critic.model.save_weights("src/criticmodel.h5", overwrite=True)
             # with open("src/criticmodel.json", "w") as outfile:
             #     json.dump(critic.model.to_json(), outfile)
 
@@ -1125,42 +1153,52 @@ class DijkstraController(app_manager.RyuApp):
             print("-" * 50)
             print("")
 
-            # 绘制图像，并保存
-            if i != 0 and i % 10 == 0:
-                plt.cla()
-                plt.plot(step_list, reward_list)
-                print(step_list, reward_list)
-                plt.xlabel("step")
-                plt.ylabel("reward")
-                plt.title("reward-step")
-                img_name = "img/reward/" + str(i) + "-th Episode"
-                plt.savefig(img_name)
-            if i != 0 and i % 10 == 0:
-                plt.cla()  # 清除
-                plt.plot(step_list, loss_list)
-                plt.xlabel("step")
-                plt.ylabel("loss")
-                plt.title("loss-step")
-                img_name = "img/loss/" + str(i) + "-th Episode"
-                plt.savefig(img_name)
+            # # 绘制图像，并保存
+            # if i != 0 and i % 10 == 0:
+            #     plt.cla()
+            #     plt.plot(step_list, reward_list)
+            #     print(step_list, reward_list)
+            #     plt.xlabel("step")
+            #     plt.ylabel("reward")
+            #     plt.title("reward-step")
+            #     img_name = "img/reward/" + str(i) + "-th Episode"
+            #     plt.savefig(img_name)
+            # if i != 0 and i % 10 == 0:
+            #     plt.cla()  # 清除
+            #     plt.plot(step_list, loss_list)
+            #     plt.xlabel("step")
+            #     plt.ylabel("loss")
+            #     plt.title("loss-step")
+            #     img_name = "img/loss/" + str(i) + "-th Episode"
+            #     plt.savefig(img_name)
 
         # 训练完成之后最后保存信息
         print("Now we save model")
         actor.model.save_weights("src/actormodel.h5", overwrite=True)
-        # with open("src/actormodel.json", "w") as outfile:
-        #     json.dump(actor.model.to_json(), outfile)
-
+        # # with open("src/actormodel.json", "w") as outfile:
+        # #     json.dump(actor.model.to_json(), outfile)
+        #
         critic.model.save_weights("src/criticmodel.h5", overwrite=True)
         # with open("src/criticmodel.json", "w") as outfile:
         #     json.dump(critic.model.to_json(), outfile)
+        txt_save("sec_avg2.txt", avgsec_list)
+        txt_save("sec_max2.txt", maxsec_list)
+        txt_save("cpu2.txt", cpu_list)
+        txt_save("jit2.txt", jit_list)
+        txt_save("lossp2.txt", lossp_list)
+
+        txt_save("reward2.txt", reward_list)
+        txt_save("loss2.txt", loss_list)
+        txt_save("step.txt", step_list2)
 
         print("Finish.")
+
+
 
 
 if __name__ == '__main__':
     os.system('mn -c')
     os.system('ryu-manager /usr/local/SDNDDPG/DijkstraController.py --observe-links')
-
 
 
     # print([i for i in range(5001, 5001+(13*13))])

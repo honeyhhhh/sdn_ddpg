@@ -2,7 +2,7 @@
 # import jsonlines
 from mininet.net import Mininet
 from mininet.node import Host, OVSKernelSwitch, RemoteController
-# from mininet.cli import CLI
+from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 from mininet.link import TCLink
 from mininet.clean import cleanup
@@ -16,22 +16,6 @@ from subprocess import Popen
 from multiprocessing import Process
 import os
 import time
-ports = [
-    [-1, 5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012, 5013],
-    [5014, -1, 5015, 5016, 5017, 5018, 5019, 5020, 5021, 5022, 5023, 5024, 5025, 5026],
-    [5027, 5028, -1, 5029, 5030, 5031, 5032, 5033, 5034, 5035, 5036, 5037, 5038, 5039],
-    [5040, 5041, 5042, -1, 5043, 5044, 5045, 5046, 5047, 5048, 5049, 5050, 5051, 5052],
-    [5053, 5054, 5055, 5056, -1, 5057, 5058, 5059, 5060, 5061, 5062, 5063, 5064, 5065],
-    [5066, 5067, 5068, 5069, 5070, -1, 5071, 5072, 5073, 5074, 5075, 5076, 5077, 5078],
-    [5079, 5080, 5081, 5082, 5083, 5084, -1, 5085, 5086, 5087, 5088, 5089, 5090, 5091],
-    [5092, 5093, 5094, 5095, 5096, 5097, 5098, -1, 5099, 5100, 5101, 5102, 5103, 5104],
-    [5105, 5106, 5107, 5108, 5109, 5110, 5111, 5112, -1, 5113, 5114, 5115, 5116, 5117],
-    [5118, 5119, 5120, 5121, 5122, 5123, 5124, 5125, 5126, -1, 5127, 5128, 5129, 5130],
-    [5131, 5132, 5133, 5134, 5135, 5136, 5137, 5138, 5139, 5140, -1, 5141, 5142, 5143],
-    [5144, 5145, 5146, 5147, 5148, 5149, 5150, 5151, 5152, 5153, 5154, -1, 5155, 5156],
-    [5157, 5158, 5159, 5160, 5161, 5162, 5163, 5164, 5165, 5166, 5167, 5168, -1, 5169],
-    [5170, 5171, 5172, 5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180, 5181, 5182, -1]
-]
 
 
 class Traffic():
@@ -183,12 +167,12 @@ def myNetwork():
     s6 = net.addSwitch('s6', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='0000000000000006')
     s7 = net.addSwitch('s7', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='0000000000000007')
     s8 = net.addSwitch('s8', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='0000000000000008')
-    # s9 = net.addSwitch('s9', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='0000000000000009')
-    # s10 = net.addSwitch('s10', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000a')
-    # s11 = net.addSwitch('s11', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000b')
-    # s12 = net.addSwitch('s12', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000c')
-    # s13 = net.addSwitch('s13', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000d')
-    # s14 = net.addSwitch('s14', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000e')
+    s9 = net.addSwitch('s9', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='0000000000000009')
+    s10 = net.addSwitch('s10', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000a')
+    s11 = net.addSwitch('s11', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000b')
+    s12 = net.addSwitch('s12', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000c')
+    s13 = net.addSwitch('s13', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000d')
+    s14 = net.addSwitch('s14', cls=OVSKernelSwitch, protocols=['OpenFlow13'], dpid='000000000000000e')
 
 
     info( '*** Add hosts\n')
@@ -213,18 +197,18 @@ def myNetwork():
 
 
 
-    # h9 = net.addHost('h9', cls=Host, ip='10.0.0.9',
-    #                  defaultRoute=None, mac='00:00:00:00:00:09')
-    # h10 = net.addHost('h10', cls=Host, ip='10.0.0.10',
-    #                   defaultRoute=None, mac='00:00:00:00:00:0a')
-    # h11 = net.addHost('h11', cls=Host, ip='10.0.0.11',
-    #                   defaultRoute=None, mac='00:00:00:00:00:0b')
-    # h12 = net.addHost('h12', cls=Host, ip='10.0.0.12',
-    #                   defaultRoute=None, mac='00:00:00:00:00:0c')
-    # h13 = net.addHost('h13', cls=Host, ip='10.0.0.13',
-    #                   defaultRoute=None, mac='00:00:00:00:00:0d')
-    # h14 = net.addHost('h14', cls=Host, ip='10.0.0.14',
-    #                   defaultRoute=None, mac='00:00:00:00:00:0e')
+    h9 = net.addHost('h9', cls=Host, ip='10.0.0.9',
+                     defaultRoute=None, mac='00:00:00:00:00:09')
+    h10 = net.addHost('h10', cls=Host, ip='10.0.0.10',
+                      defaultRoute=None, mac='00:00:00:00:00:0a')
+    h11 = net.addHost('h11', cls=Host, ip='10.0.0.11',
+                      defaultRoute=None, mac='00:00:00:00:00:0b')
+    h12 = net.addHost('h12', cls=Host, ip='10.0.0.12',
+                      defaultRoute=None, mac='00:00:00:00:00:0c')
+    h13 = net.addHost('h13', cls=Host, ip='10.0.0.13',
+                      defaultRoute=None, mac='00:00:00:00:00:0d')
+    h14 = net.addHost('h14', cls=Host, ip='10.0.0.14',
+                      defaultRoute=None, mac='00:00:00:00:00:0e')
 
     info( '*** Add links\n')
     # links between h s
@@ -236,12 +220,12 @@ def myNetwork():
     net.addLink(s6, h6)
     net.addLink(s7, h7)
     net.addLink(s8, h8)
-    # net.addLink(s9, h9)
-    # net.addLink(s10, h10)
-    # net.addLink(s11, h11)
-    # net.addLink(s12, h12)
-    # net.addLink(s13, h13)
-    # net.addLink(s14, h14)
+    net.addLink(s9, h9)
+    net.addLink(s10, h10)
+    net.addLink(s11, h11)
+    net.addLink(s12, h12)
+    net.addLink(s13, h13)
+    net.addLink(s14, h14)
 
     # links between s
     #ss = {'bw':10,'max_queue_size':500}
@@ -253,20 +237,20 @@ def myNetwork():
     net.addLink(s2, s4)
     net.addLink(s3, s6)
     net.addLink(s4, s5)
-    # net.addLink(s4, s11)
+    net.addLink(s4, s11)
     net.addLink(s5, s6)
     net.addLink(s5, s7)
-    # net.addLink(s6, s10)
-    # net.addLink(s6, s13)
+    net.addLink(s6, s10)
+    net.addLink(s6, s13)
     net.addLink(s7, s8)
-    # net.addLink(s8, s9)
-    # net.addLink(s9, s10)
-    # net.addLink(s9, s12)
-    # net.addLink(s9, s14)
-    # net.addLink(s11, s14)
-    # net.addLink(s11, s12)
-    # net.addLink(s12, s14)
-    # net.addLink(s13, s14)
+    net.addLink(s8, s9)
+    net.addLink(s9, s10)
+    net.addLink(s9, s12)
+    net.addLink(s9, s14)
+    net.addLink(s11, s14)
+    net.addLink(s11, s12)
+    net.addLink(s12, s14)
+    net.addLink(s13, s14)
 
 
 
@@ -287,19 +271,19 @@ def myNetwork():
     s6.start([c0])
     s7.start([c0])
     s8.start([c0])
-    # s9.start([c0])
-    # s10.start([c0])
-    # s11.start([c0])
-    # s12.start([c0])
-    # s13.start([c0])
-    # s14.start([c0])
+    s9.start([c0])
+    s10.start([c0])
+    s11.start([c0])
+    s12.start([c0])
+    s13.start([c0])
+    s14.start([c0])
 
-    HostList = [{h1:ports[0]}, {h2:ports[1]}, {h3:ports[2]}, {h4:ports[3]}, {h5:ports[4]}, {h6:ports[5]}, {h7:ports[6]}, {h8:ports[7]}]
-    for i in range(len(HostList)):
-        for k, v in HostList[i].items():
-            for j in v:
-                if j != -1:
-                    k.cmd(str('iperf3') + str(' -s ') + str(' -p ') + str(j)  + str(' &'))
+    # HostList = [{h1:ports[0]}, {h2:ports[1]}, {h3:ports[2]}, {h4:ports[3]}, {h5:ports[4]}, {h6:ports[5]}, {h7:ports[6]}, {h8:ports[7]}]
+    # for i in range(len(HostList)):
+    #     for k, v in HostList[i].items():
+    #         for j in v:
+    #             if j != -1:
+    #                 k.cmd(str('iperf3') + str(' -s ') + str(' -p ') + str(j)  + str(' &'))
 
 
     info( '*** Post configure switches and hosts\n')
@@ -308,10 +292,10 @@ def myNetwork():
     p = Process(target=run_ryu())
     p.start()
     p.join()
-
     #
-    time.sleep(10)
-    net.pingAll()
+    # #
+    # time.sleep(10)
+    # net.pingAll()
     # t = Traffic(nodes_num=8,links_num=10, ratio=0.1)
     # net.iperfMulti(hl=HostList, tm=t.gen_traffic())
     # cup_avg, sec_avg, jit_avg, lost_sum, ooo_sum = read_iperf()
@@ -350,7 +334,7 @@ def myNetwork():
     # print("done8")
 
 
-    # CLI(net)
+    CLI(net)
     #net.stop()
 
     return net
