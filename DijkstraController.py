@@ -638,7 +638,7 @@ class DijkstraController(app_manager.RyuApp):
         self.LINKS_NUM = 10
         self.a_dim = self.LINKS_NUM
         self.s_dim = self.ACTIVE_NODES**2 - self.ACTIVE_NODES
-        self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.105)
+        self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.012)
         self.env_T = np.full([self.ACTIVE_NODES]*2, -1.0, dtype=float)
         self.env_W = np.full([self.a_dim], -1.0, dtype=float)
         self.env_edge = []  # 保存无向边
@@ -1051,9 +1051,9 @@ class DijkstraController(app_manager.RyuApp):
         # 开始迭代
         print("Experiment Start.")
         for i in range(episode):
-            # 输出当前信息
+            # 输出当前信息 0.05 0.025 0.01
             if i == 5:
-                self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.1)
+                self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=0.01)
             print("Episode : " + str(i) + " Replay Buffer " + str(buff.getCount()))
             total_reward =  0
             total_loss = 0
@@ -1181,15 +1181,14 @@ class DijkstraController(app_manager.RyuApp):
         critic.model.save_weights("src/criticmodel.h5", overwrite=True)
         # with open("src/criticmodel.json", "w") as outfile:
         #     json.dump(critic.model.to_json(), outfile)
-        txt_save("sec_avg2.txt", avgsec_list)
-        txt_save("sec_max2.txt", maxsec_list)
-        txt_save("cpu2.txt", cpu_list)
-        txt_save("jit2.txt", jit_list)
-        txt_save("lossp2.txt", lossp_list)
+        txt_save("sec_avg3.txt", avgsec_list)
+        txt_save("sec_max3.txt", maxsec_list)
+        txt_save("cpu3.txt", cpu_list)
+        txt_save("jit3.txt", jit_list)
+        txt_save("lossp3.txt", lossp_list)
 
-        txt_save("reward2.txt", reward_list)
-        txt_save("loss2.txt", loss_list)
-        txt_save("step.txt", step_list2)
+        txt_save("reward3.txt", reward_list)
+        txt_save("loss3.txt", loss_list)
 
         print("Finish.")
 
