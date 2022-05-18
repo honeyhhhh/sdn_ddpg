@@ -38,6 +38,7 @@ from subprocess import Popen
 from multiprocessing import Process
 import os
 import time
+import random
 
 
 tmd = 0
@@ -803,40 +804,74 @@ class DijkstraController(app_manager.RyuApp):
             # 找到和源主机直接相连的交换机
             src_switch = self.host_mac_to[src_mac][0]
 
-            # 找到和源主机直接相连的端口
+            # # 找到和源主机直接相连的端口
             first_port = self.host_mac_to[src_mac][1]
 
             # 找到和目的主机直接相连的交换机
             dst_switch = self.host_mac_to[dst_mac][0]
 
-            # 找到与目的主机直接相连的交换机的端口
-            final_port = self.host_mac_to[dst_mac][1]
+            # # 找到与目的主机直接相连的交换机的端口
+            # final_port = self.host_mac_to[dst_mac][1]
+            #
+            # # 计算路径
+            # path = self.topo.dijkstra(
+            #     src_switch, dst_switch, first_port, final_port, self.total_step_count)
+            # assert len(path) > 0
+            #
+            # # 配置路径上的交换机
+            # self.configure_path(path, src_mac, dst_mac)
+            #
+            # out_port = None
+            # # 设置 Packet-Out 为路径上当前交换机应该转发到的端口，避免丢包
+            # for switch, _, op in path:
+            #     if switch == dpid:
+            #         out_port = op
 
-            # 计算路径
-            path = self.topo.dijkstra(
-                src_switch, dst_switch, first_port, final_port, self.total_step_count)
-            assert len(path) > 0
+            # rip
+            # print(src_switch, dst_switch)
+            # out_port = self.get_out_port(datapath, src_mac, dst_mac, in_port)
+            # receive the host !!!!!
+            # host not in nx
+            if src_mac not in self.topo:
+                self.topo.add_nodes_from([(src_mac, {"ports": [first_port,]}),])  #?
+                self.topo.add_edge(dpid, src_mac, **{"src_port": in_port, "dst_port": -1, "weight": 1})
+                self.topo.add_edge(src_mac, dpid, **{"src_port": -1, "dst_port": in_port, "weight": 1})
+                self.logger.info(self.topo.edges(data=True))
+                self.logger.info(self.topo.nodes(data=True))
+                time.sleep(1)
 
-            # 配置路径上的交换机
-            self.configure_path(path, src_mac, dst_mac)
+            if dst_mac in self.topo:
 
-            out_port = None
-            # 设置 Packet-Out 为路径上当前交换机应该转发到的端口，避免丢包
-            for switch, _, op in path:
-                if switch == dpid:
-                    out_port = op
+                path = nx.shortest_path(self.topo, src_mac, dst_mac)
+                # print(path,dpid,path.index(dpid),src_switch, dst_switch)
+
+                next_hop = path[path.index(dpid) + 1]
+                # print(dpid, next_hop)
+                out_port = self.topo[dpid][next_hop]['src_port']
+                # print(dpid, dst_mac, out_port)
+            else:
+
+                # print("FLOOD")
+                out_port = datapath.ofproto.OFPP_FLOOD
+
+
             assert out_port
             # self.logger.info(
             #     "From {}:{}, a {} packet in ({} -> {}), send to {}".format(dpid, in_port, eth.ethertype, src_mac, dst_mac, out_port))
 
         else:
             # 目的 MAC 地址尚未收入拓扑或本身就是广播，设置为泛洪
+            # print("FLOOD2")
             out_port = ofproto.OFPP_FLOOD
             # self.logger.info(
             #     "Unknown/Broadcast MAC address {}, flooding...".format(dst_mac))
 
         # 发送 Packet-Out，避免丢包
         actions = [parser.OFPActionOutput(out_port)]
+        if out_port != ofproto.OFPP_FLOOD:
+            match = parser.OFPMatch(in_port=in_port, eth_dst=dst_mac, eth_src=src_mac)
+            self.add_flow(datapath=datapath, priority=1, match=match, actions=actions)
+
         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
                                   in_port=in_port, actions=actions, data=msg.data)
         datapath.send_msg(out)
@@ -1016,7 +1051,6 @@ class DijkstraController(app_manager.RyuApp):
         # 可视化集合定义
         # reward_list = []  # 记录所有的rewards进行可视化展示
         # loss_list = []  # 记录损失函数进行可视化展示
-        self.pingall()
 
         avgsec_list = []
         maxsec_list = []
@@ -1047,14 +1081,26 @@ class DijkstraController(app_manager.RyuApp):
         critic.target_model.load_weights(r"./src/criticmodel.h5")
         print("Weight load successfully")
 
+        print("pingall")
+        self.net.pingAll()
+        print("pingalldone!")
+        # self.logger.info(self.topo.edges(data=True))
+        # self.logger.info(self.topo.nodes(data=True))
+
+        #CLI(self.net)
+
+
+
         ti = 0.01
         tia = 0.0001
+        # self.pingall()
 
         while ti <= 0.05:
             self.tgen = Traffic(self.ACTIVE_NODES, self.LINKS_NUM, ratio=ti)
             s_t = self.rl_state()
             # a_t_original = actor.model.predict(s_t.reshape(1, s_t.shape[0]))
             # a_t = np.fabs(a_t_original[0])
+            # a_t = random.sample(range(1,30), self.a_dim)
             # self.step(a_t)
 
             # excute
@@ -1062,7 +1108,7 @@ class DijkstraController(app_manager.RyuApp):
             self.net.iperfMulti(hl=self.HostList, tm=self.env_T)
             # read output
             self.avg_cpup, self.avg_sec, self.avg_jit, self.loss_p, self.sec_max = read_iperf()
-
+            #
 
             print("ti : {}  avg_sec : {} max_sec: {} jit: {} loss: {}".format(ti, self.avg_sec, self.sec_max, self.avg_jit, self.loss_p))
 
@@ -1237,7 +1283,11 @@ class DijkstraController(app_manager.RyuApp):
 if __name__ == '__main__':
     os.system('rm /usr/local/SDNDDPG/log/*')
     os.system('mn -c')
+
+
+
     os.system('ryu-manager /usr/local/SDNDDPG/DijkstraController.py --observe-links')
+
 
 
     # print([i for i in range(5001, 5001+(13*13))])
